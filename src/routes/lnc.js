@@ -1,4 +1,3 @@
-js
 'use strict';
 
 const APP_ID = 10481;
