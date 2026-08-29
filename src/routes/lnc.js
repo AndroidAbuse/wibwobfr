@@ -1,3 +1,4 @@
+```js
 'use strict';
 
 const APP_ID = 10481;
@@ -7,7 +8,8 @@ async function lncRoutes(fastify) {
   function buildLncResponse() {
     const serverUrl = process.env.GAME_SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
     const serverHost = process.env.GAME_SERVER_HOST || 'localhost';
-    const port = parseInt(process.env.PORT, 10) || 3000;
+    const isHttps = serverUrl.startsWith('https');
+    const publicPort = parseInt(process.env.PUBLIC_PORT, 10) || (isHttps ? 443 : 80);
 
     return {
       header: {
@@ -20,7 +22,7 @@ async function lncRoutes(fastify) {
           status: 'ok',
           statusCode: 200,
           ip: serverHost,
-          port,
+          port: publicPort,
         },
         maintenance: {
           isOn: false,
@@ -36,13 +38,13 @@ async function lncRoutes(fastify) {
         },
         gameServer: {
           ip: serverHost,
-          port,
+          port: publicPort,
           url: serverUrl,
-          protocol: serverUrl.startsWith('https') ? 'https' : 'http',
+          protocol: isHttps ? 'https' : 'http',
         },
         tcpSocket: {
           ip: serverHost,
-          port: port + 1,
+          port: publicPort + 1,
         },
         heartbeat: {
           interval: 120,
@@ -67,7 +69,6 @@ async function lncRoutes(fastify) {
         key: `HSP_LNC_NOTICE_TIMESTAMP_${APP_ID}_${APP_VERSION}`,
         value: Date.now(),
       },
-      // Top-level compat fields the game client may check
       resultCode: 200,
       resultMsg: 'SUCCESS',
     };
@@ -82,3 +83,4 @@ async function lncRoutes(fastify) {
 }
 
 module.exports = lncRoutes;
+```
