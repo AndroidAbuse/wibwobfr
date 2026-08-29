@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: yokai-wibble-wobble-server
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: SUPABASE_URL
+        value: https://ljgubewtkmmenwkevpzt.supabase.co
+      - key: PORT
+        value: 3000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
