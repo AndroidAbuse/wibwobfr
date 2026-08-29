@@ -6,11 +6,8 @@ const APP_VERSION = '2.0.3';
 
 async function lncRoutes(fastify) {
   function buildLncResponse() {
-    const defaultUrl = 'http://localhost:' + (process.env.PORT || 3000);
-    const serverUrl = process.env.GAME_SERVER_URL || defaultUrl;
-    const serverHost = process.env.GAME_SERVER_HOST || 'localhost';
-    const isHttps = serverUrl.startsWith('https');
-    const publicPort = parseInt(process.env.PUBLIC_PORT, 10) || (isHttps ? 443 : 80);
+  js
+    const serverUrl = process.env.GAME_SERVER_URL || ('http://localhost:' + (process.env.PORT || 3000));
 
     return {
       header: {
