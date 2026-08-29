@@ -1,4 +1,4 @@
-```js
+js
 'use strict';
 
 const APP_ID = 10481;
@@ -6,7 +6,8 @@ const APP_VERSION = '2.0.3';
 
 async function lncRoutes(fastify) {
   function buildLncResponse() {
-    const serverUrl = process.env.GAME_SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const defaultUrl = 'http://localhost:' + (process.env.PORT || 3000);
+    const serverUrl = process.env.GAME_SERVER_URL || defaultUrl;
     const serverHost = process.env.GAME_SERVER_HOST || 'localhost';
     const isHttps = serverUrl.startsWith('https');
     const publicPort = parseInt(process.env.PUBLIC_PORT, 10) || (isHttps ? 443 : 80);
@@ -66,7 +67,7 @@ async function lncRoutes(fastify) {
         },
       },
       timestamp: {
-        key: `HSP_LNC_NOTICE_TIMESTAMP_${APP_ID}_${APP_VERSION}`,
+        key: 'HSP_LNC_NOTICE_TIMESTAMP_' + APP_ID + '_' + APP_VERSION,
         value: Date.now(),
       },
       resultCode: 200,
@@ -83,4 +84,3 @@ async function lncRoutes(fastify) {
 }
 
 module.exports = lncRoutes;
-```
