@@ -5,7 +5,7 @@ const APP_VERSION = '2.0.3';
 
 async function lncRoutes(fastify) {
   function buildLncResponse() {
-  js
+  
     const serverUrl = process.env.GAME_SERVER_URL || ('http://localhost:' + (process.env.PORT || 3000));
 
     return {
