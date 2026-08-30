@@ -5,8 +5,10 @@ const APP_VERSION = '2.0.3';
 
 async function lncRoutes(fastify) {
   function buildLncResponse() {
-  
-    const serverUrl = process.env.GAME_SERVER_URL || ('http://localhost:' + (process.env.PORT || 3000));
+    const serverHost = 'wibwobfr.onrender.com';
+    const publicPort = 443;
+    const isHttps = true;
+    const serverUrl = 'https://wibwobfr.onrender.com';
 
     return {
       header: {
@@ -37,11 +39,11 @@ async function lncRoutes(fastify) {
           ip: serverHost,
           port: publicPort,
           url: serverUrl,
-          protocol: isHttps ? 'https' : 'http',
+          protocol: 'https',
         },
         tcpSocket: {
           ip: serverHost,
-          port: publicPort + 1,
+          port: publicPort,
         },
         heartbeat: {
           interval: 120,
