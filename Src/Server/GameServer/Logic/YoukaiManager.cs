@@ -1,0 +1,191 @@
+﻿using Newtonsoft.Json;
+using Puniemu.Src.Server.GameServer.DataClasses;
+using Puniemu.Src.Server.GameServer.DataClasses.Mission;
+using Puniemu.Src.Server.GameServer.Logic.Mst;
+using Puniemu.Src.Server.GameServer.Requests.InitGacha.DataClasses;
+using Puniemu.Src.TableParser.DataClasses;
+using Puniemu.Src.TableParser.Logic;
+using System.Buffers;
+using System.IO;
+using System.Numerics;
+using System.Security;
+using System.Text;
+
+namespace Puniemu.Src.Server.GameServer.Logic
+{
+    public class YoukaiManager
+    {
+        static readonly int[] SoulLevelCosts = { 0, 1000, 2000, 4000, 6000, 9000, 12000 };
+
+        static int SoulLevelFormula(int n)
+        {
+            if (n < 0 || n >= SoulLevelCosts.Length)
+                return 0;
+            return SoulLevelCosts[n];
+        }
+        static int SoulLevel(int n)
+        {
+            int points = 0;
+            for (int i = 1; i < 7; i++)
+            {
+                points += SoulLevelFormula(i);
+                if (n < points)
+                    return i;
+            }
+            return 7;
+        }
+        static int SoulPoints(int n)
+        {
+            int points = 0;
+            for (int i = 1; i <= n; i++)
+            {
+                points += SoulLevelFormula(i);
+            }
+            return points;
+        }
+
+        public static SkillResult? AddExpToSkill(TableParser<YwpUserYoukaiSkill> youkaiList, long YoukaiId, int expToAdd)
+        {
+            var UserYoukaiIndex = GetYoukaiSkillIndex(youkaiList, YoukaiId);
+            if (UserYoukaiIndex == -1)
+            {
+                return null;
+            }
+            else
+            {
+                int amuLevel = youkaiList.Items[UserYoukaiIndex].Level;
+                SkillResult? res = new();
+                res.SkillID = YoukaiId;
+                res.isMaxLevel = false;
+                res.Before.Level = amuLevel;
+                res.Before.Exp = youkaiList.Items[UserYoukaiIndex].Points;
+                res.Before.ExpBar.Denominator = youkaiList.Items[UserYoukaiIndex].PercentageDenominator;
+                res.Before.ExpBar.Numerator = youkaiList.Items[UserYoukaiIndex].PercentageNumerator;
+                res.Before.ExpBar.Percentage = youkaiList.Items[UserYoukaiIndex].Percentage;
+
+                if (amuLevel >= 7)
+                {
+                    res.After.Level = res.Before.Level;
+                    res.After.Exp = res.Before.Exp;
+                    res.After.ExpBar.Denominator = res.Before.ExpBar.Denominator;
+                    res.After.ExpBar.Numerator = res.Before.ExpBar.Numerator;
+                    res.After.ExpBar.Percentage = res.Before.ExpBar.Percentage;
+                    res.isMaxLevel = true;
+                    return res;
+                }
+
+                int current_points = res.Before.Exp;
+                int new_points = expToAdd + current_points;
+                res.After.Exp = new_points;
+
+                int new_level = SoulLevel(new_points);
+
+                int denominator = SoulLevelFormula(new_level);
+                int numerator = new_points - SoulPoints(new_level - 1);
+                int percentage = (int)(((double)numerator / (double)denominator) * 100);
+                if (new_level >= 7) percentage = 0;
+
+                res.After.Level = new_level;
+                res.After.ExpBar.Denominator = denominator;
+                res.After.ExpBar.Numerator = numerator;
+                res.After.ExpBar.Percentage = percentage;
+
+                return res;
+            }
+        }
+
+        public static void DeleteYoukai(TableParser<YwpUserYoukai> userYokai, TableParser<YwpUserYoukaiSkill> userSkill, long youkaiId, TableParser<YwpUserYoukaiBonusEffect> bonus) 
+        {
+            var yokaiIdx = userYokai.Items.FindIndex(x=>x.YoukaiId == youkaiId);
+            if (yokaiIdx == -1) throw new NotImplementedException("Yokai not found in user");
+            var skillIdx = userSkill.Items.FindIndex(x => x.YoukaiId == youkaiId);
+            if (skillIdx == -1) throw new NotImplementedException("Skill not found in user");
+            var bonusIdx = bonus.Items.FindIndex(x => x.YoukaiID == youkaiId);
+            if (bonusIdx != -1) bonus.Items.RemoveAt(bonusIdx);
+            userYokai.Items.RemoveAt(yokaiIdx);
+            userSkill.Items.RemoveAt(skillIdx);
+        }
+        public static async Task AddYoukai(TableParser<YwpUserYoukai> userYokai, long YoukaiId, TableParser<YwpUserYoukaiSkill> userSkill, TableParser<YwpUserYoukaiBonusEffect> userBonus, 
+            string gdkey, TableParser<YwpUserMission> userMission = null, bool manualMissionSave = false)
+        {
+            var YoukaiMstTable = new TableParser.Logic.TableParser(JsonConvert.DeserializeObject<Dictionary<string, string>>(DataManager.Logic.DataManager.GameDataManager!.GamedataCache["ywp_mst_youkai"]!)!["tableData"]);
+            var YoukaiLevelMstTable = new TableParser.Logic.TableParser(JsonConvert.DeserializeObject<Dictionary<string, string>>(DataManager.Logic.DataManager.GameDataManager.GamedataCache["ywp_mst_youkai_level"]!)!["tableData"]);
+            var UserYoukaiIndex = GetYoukaiIndex(userYokai, YoukaiId);
+            var MstYoukaiIndex = YoukaiMstTable.Table.FindIndex(x => x[0] == YoukaiId.ToString());
+            if (UserYoukaiIndex == -1)
+            {
+                var um = await MissionManager.UpdateProgress(gdkey, DataClasses.Mission.MissionType.AddTotalYokaiToMedallium, 1, userMission, manualMissionSave);
+                await MissionManager.UpdateProgress(gdkey, MissionType.BefriendSpecificYokai, (int)YoukaiId, um, manualMissionSave);
+                await MissionManager.UpdateProgress(gdkey, MissionType.GetSpecificYokaiToLevel, (int)YoukaiId, progressToUpdate2: 1, paramUserMission: um, manualSave: manualMissionSave);
+                // add new youkai
+                var tmpIdx = 0;
+
+                var levelType = int.Parse(YoukaiMstTable.Table[MstYoukaiIndex][5]);
+                foreach (string[] str in YoukaiLevelMstTable.Table)
+                {
+                    if (str[0] == levelType.ToString() && str[1] == "1")
+                        break;
+                    tmpIdx++;
+                }
+                userYokai.AddItem(new YwpUserYoukai { YoukaiId = YoukaiId, Level = 1, Exp = 0, Hp =  int.Parse(YoukaiMstTable.Table[MstYoukaiIndex][8]), Atk = int.Parse(YoukaiMstTable.Table[MstYoukaiIndex][10]), ExpDenominator = int.Parse(YoukaiLevelMstTable.Table[tmpIdx][3]), ExpNumerator = 0, Percentage = 0, BefriendDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), BreakLimitCount = 0 });
+
+            }
+            AddYoukaiSkill(ref userSkill, YoukaiId);
+            AddYoukaiBonusEff(userBonus, YoukaiId);
+            return;
+        }
+
+        private static void AddYoukaiBonusEff(TableParser<YwpUserYoukaiBonusEffect> bonusEff, long youkaiId)
+        {
+            if(MstBonusEffectManager.IsHaveBonusEffect(youkaiId) && bonusEff.Items.FirstOrDefault(x => x.YoukaiID == youkaiId) == null)
+            {
+                var newEff = new YwpUserYoukaiBonusEffect()
+                {
+                    YoukaiID = youkaiId,
+                    BonusEffectLevel = 1,
+                    BonusEff2ActivatedFlg = 0, //Second bonus effect not implemented yet
+                    BonusEff3ActivatedFlg = 0
+                };
+                bonusEff.Items.Add(newEff);
+            }
+        }
+        private static void AddYoukaiSkill(ref TableParser<YwpUserYoukaiSkill> youkaiList, long YoukaiId)
+        {
+            var UserYoukaiIndex = GetYoukaiSkillIndex(youkaiList, YoukaiId);
+            if (UserYoukaiIndex == -1)
+            {
+                youkaiList.AddItem(new YwpUserYoukaiSkill { YoukaiId = YoukaiId, Level = 1, Points = 0, PercentageDenominator = 1000, PercentageNumerator = 0, Percentage = 0 });
+                return;
+            }
+            int amuLevel = youkaiList.Items[UserYoukaiIndex].Level;
+            if (amuLevel >= 7)
+            {
+                return;
+            }
+            int current_points = youkaiList.Items[UserYoukaiIndex].Points;
+            int new_points = 1000 + current_points;
+            int new_level = SoulLevel(new_points);
+
+            int denominator = SoulLevelFormula(new_level);
+            int numerator = new_points - SoulPoints(new_level - 1);
+            int percentage = (int)(((double)numerator / (double)denominator) * 100);
+            if (new_level >= 7)
+            {
+                percentage = 0;
+            }
+            youkaiList.Items[UserYoukaiIndex].Level = new_level;
+            youkaiList.Items[UserYoukaiIndex].Points = new_points;
+            youkaiList.Items[UserYoukaiIndex].PercentageDenominator = denominator;
+            youkaiList.Items[UserYoukaiIndex].PercentageNumerator = numerator;
+            youkaiList.Items[UserYoukaiIndex].Percentage = percentage;
+        }
+        public static int GetYoukaiSkillIndex(TableParser<YwpUserYoukaiSkill> parser, long YoukaiId)
+        {
+            return parser.Items.FindIndex(x => x.YoukaiId == YoukaiId);
+        }
+        public static int GetYoukaiIndex(TableParser<YwpUserYoukai> parser, long YoukaiId)
+        {
+            return parser.Items.FindIndex(x => x.YoukaiId == YoukaiId);
+        }
+    }
+}

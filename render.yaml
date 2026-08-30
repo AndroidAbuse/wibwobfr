@@ -1,15 +1,29 @@
 services:
   - type: web
-    name: yokai-wibble-wobble-server
-    env: node
-    buildCommand: npm install
-    startCommand: npm start
+    name: puniemu-wibwob
+    env: docker
+    plan: free
+    healthCheckPath: /
     envVars:
-      - key: SUPABASE_URL
-        value: https://ljgubewtkmmenwkevpzt.supabase.co
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
       - key: PORT
-        value: 3000
-      - key: JWT_SECRET
-        generateValue: true
-      - key: SUPABASE_SERVICE_KEY
+        value: "8080"
+      - key: PostgresConnectionString
         sync: false
+      - key: IsWibWob
+        value: "true"
+      - key: GameVersion
+        value: "4.0.6"
+      - key: MaxConnections
+        value: "100"
+      - key: MaxCachedAccounts
+        value: "100"
+      - key: DataDownloadURL
+        value: "0"
+      - key: ServerName
+        value: "WibWob FR"
+      - key: EmailForAuthMessages
+        value: ""
+      - key: AppPasswordForAuthMessages
+        value: ""
